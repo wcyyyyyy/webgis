@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta
+			name="viewport"
+			content="initial-scale=1,maximum-scale=1,user-scalable=no"
+		/>
+		<title>王晨宇</title>
+		
+		<link
+		  rel="stylesheet"
+		  href="https://js.arcgis.com/4.11/esri/themes/light/main.css"
+		/>
+		<script src="https://js.arcgis.com/4.11/"></script>
+		<style>
+			html,
+			body,
+			#viewDiv {
+				padding: 0;
+				margin: 0;
+				height: 100%;
+				width: 100%;
+			}
+			#mainWindow {
+				padding: 0.5em;
+				background-color: #fff;
+			}
+			#mainWindow p,
+			#uploadForm {
+				display: block;
+				padding: 0.1em;
+			}
+		</style>
+		
+		<script type="text/javascript">
+			 require([
+				"esri/layers/CSVLayer",
+				"esri/Map",
+				"esri/views/SceneView",
+				"esri/widgets/Legend",
+				"esri/widgets/Search",
+				"esri/config", 
+				"esri/widgets/Expand",
+				"esri/request",
+				"esri/layers/FeatureLayer",
+				"esri/PopupTemplate",
+				"esri/Graphic",
+				"esri/core/watchUtils"
+			], function(CSVLayer, Map, SceneView, Legend, Search, config, Expand, request, FeatureLayer, PopupTemplate, Graphic, watchUtils) {
+				
+				var renderer = {
+				    type: "simple", // autocasts as new SimpleRenderer()
+				    symbol: {
+				      type: "point-3d", // autocasts as new PointSymbol3D()
+				      symbolLayers: [
+				        {
+				          type: "object", // autocasts as new ObjectSymbol3DLayer()
+				          resource: {
+				            primitive: "cone"
+				          },
+				          width: 20000 // width of the symbol in meters
+				        }
+				      ]
+				    },
+				    label: "city location",
+				    visualVariables: [
+						{
+							type: "color",
+							field: "forest",
+							stops: [
+								{
+									value: 30,
+									color: "#FFCC99",
+									label: "1"
+								},
+								{
+									value: 50,
+									color: "#FF6666",
+									label: "2"
+								},
+								{
+									value: 70,
+									color: "#FFFF66",
+									label: "3"
+								}
+							]
+						},
+						{
+							type: "size",
+							field: "gdp",
+							stops: [
+							{
+								value: 50000,
+								size: 30000
+							},
+							{
+								value: 80000,
+								size: 80000
+							},
+							{
+								value: 120000,
+								size: 120000
+							}
+							],
+							axis: "height"
+						},
+						{
+							type: "size",
+							axis: "width-and-depth",
+							useSymbolValue: true // uses the width value defined in the symbol layer (50,000)
+						}
+						]
+					};
+				var cityLayer = new CSVLayer({
+				    url:
+				      "https://wcyyyyyy.github.io/Geojson/HubeiCity.csv",
+				    renderer: renderer
+				  });
+				var base = document.getElementById("base");
+				var basemaps = [
+					"streets",
+					"topo",
+					"gray",
+					"national-geographic",
+					"osm"
+				];
+				  
+				var map = new Map({
+				    basemap: basemaps[0],
+				    layers: [cityLayer]
+				  });
+				
+				// The initial camera of the view
+				var initCam = {
+				    // autocasts as new Camera()
+				    position: {
+				      // autocasts as new Point()
+						latitude:27,
+							longitude:113,
+						z: 2000000,
+						spatialReference: {
+							// autocasts as new SpatialReference()
+							wkid: 3857
+						}
+				    },
+				    heading: 358.8,
+				    tilt: 13.7
+				};
+				document.querySelector(".btns").addEventListener("click", function(event) {
+						for(var i = 0; i < base.length; i++)
+					{
+						if(base.options[i].selected)
+						{
+							view.map.basemap = basemaps[i];
+						}
+					}
+					});
+					// add the map to a new 3d view
+					var view = new SceneView({
+						map: map,
+						container: "viewDiv",
+						camera: initCam
+						
+					});
+				
+					var legend = new Legend({
+						view: view
+					});
+				
+					view.ui.add(legend, "bottom-left");
+					
+					var searchWidget = new Search({
+						view: view
+					});
+
+					// Add the search widget to the top right corner of the view
+					view.ui.add(searchWidget, {
+						position: "top-left"
+					});
+					
+					var portalUrl = "https://www.arcgis.com";
+					 
+					document
+						.getElementById("uploadForm")
+						.addEventListener("change", function(event) {
+							var fileName = event.target.value.toLowerCase();
+
+							if (fileName.indexOf(".zip") !== -1) {
+								//is file a zip - if not notify user
+								generateFeatureCollection(fileName);
+							} else {
+								document.getElementById("upload-status").innerHTML =
+								'<p style="color:red">Add shapefile as .zip file</p>';
+							}
+						});
+						
+						var fileForm = document.getElementById("mainWindow");
+
+						var expand = new Expand({
+							expandIconClass: "esri-icon-upload",
+							view: view,
+							content: fileForm
+						});
+
+						view.ui.add(expand, "top-right");
+
+						function generateFeatureCollection(fileName) {
+							var name = fileName.split(".");
+							name = name[0].replace("c:\\fakepath\\", "");
+
+							document.getElementById("upload-status").innerHTML = "<b>Loading </b>" + name;
+
+							var params = {
+								name: name,
+								targetSR: view.spatialReference,
+								maxRecordCount: 1000,
+								enforceInputFileSizeLimit: true,
+								enforceOutputJsonSizeLimit: true
+							};
+
+							params.generalize = true;
+							params.maxAllowableOffset = 10;
+							params.reducePrecision = true;
+							params.numberOfDigitsAfterDecimal = 0;
+
+							var myContent = {
+								filetype: "shapefile",
+								publishParameters: JSON.stringify(params),
+								f: "json"
+							};
+
+							request(portalUrl + "/sharing/rest/content/features/generate", {
+								query: myContent,
+								body: document.getElementById("uploadForm"),
+								responseType: "json"
+							})
+							.then(function(response) {
+								var layerName =
+								response.data.featureCollection.layers[0].layerDefinition.name;
+								document.getElementById("upload-status").innerHTML = "<b>Loaded: </b>" + layerName;
+								addShapefileToMap(response.data.featureCollection);
+							})
+							.catch(errorHandler);
+						}
+
+						function errorHandler(error) {
+							document.getElementById("upload-status").innerHTML = "<p style='color:red;max-width: 500px;'>" + error.message + "</p>";
+						}
+
+						function addShapefileToMap(featureCollection) {
+							var sourceGraphics = [];
+
+							var layers = featureCollection.layers.map(function(layer) {
+								var popupTemplate = new PopupTemplate({
+									title: "Uploaded Shapefile",
+									content: "{*}"
+								});
+								var graphics = layer.featureSet.features.map(function(feature) {
+									return Graphic.fromJSON(feature);
+								});
+								sourceGraphics = sourceGraphics.concat(graphics);
+								var featureLayer = new FeatureLayer({
+									popupTemplate: popupTemplate,
+									objectIdField: "FID",
+									source: graphics
+								});
+								return featureLayer;
+							});
+							map.addMany(layers);
+							view.goTo(sourceGraphics);
+
+							document.getElementById("upload-status").innerHTML = "";
+						}
+						
+						
+						
+			});
+		</script>
+	</head>
+	<body>
+		<div id="mainWindow">
+			<div>
+				<div style="padding-left:4px;">
+					<p>Add a zipped shapefile to the map.</p>
+					<form enctype="multipart/form-data" method="post" id="uploadForm">
+						<div class="field">
+							<label class="file-upload">
+								<span><strong>Add File</strong></span>
+								<input type="file" name="file" id="inFile" />
+							</label>
+						</div>
+					</form>
+					<span class="file-upload-status" style="opacity:1;" id="upload-status"></span>
+				<div id="fileInfo"></div>
+				</div>
+			</div>
+		</div>
+		<div id="viewDiv"></div>
+		<select id="base" class="btns" style="position: fixed ! important; right: 10px; top: 70px;">
+		 		<option value="0">streets</option>
+		 		<option value="1">topo</option>
+		 		<option value="2">gray</option>
+		 		<option value="3">national-geographic</option>
+		 		<option value="4">osm</option>
+		</select>
+	</body>
+</html>
